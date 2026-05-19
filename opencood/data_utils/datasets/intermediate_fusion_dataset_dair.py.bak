@@ -89,139 +89,6 @@ class IntermediateFusionDatasetDAIR(Dataset):
             veh_frame_id = frame_info['vehicle_image_path'].split("/")[-1].replace(".jpg", "")
             self.co_data[veh_frame_id] = frame_info
 
-        #         # -------- optional time delay config (default: off) --------
-        # self.delay_cfg = params.get('time_delay', {})
-        # self.add_delay = self.delay_cfg.get('add_delay', False)
-        # self.delay_agent = self.delay_cfg.get('agent', 'infrastructure')
-        # self.delay_k = int(self.delay_cfg.get('k', 0))
-        # self.delay_mode = self.delay_cfg.get('mode', 'previous')
-
-        # # build index for infrastructure frames
-        # self.inf_frame_to_info = OrderedDict()
-        # inf_ids = []
-        # for frame_info in co_datainfo:
-        #     inf_frame_id = frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
-        #     self.inf_frame_to_info[inf_frame_id] = frame_info
-        #     inf_ids.append(inf_frame_id)
-
-        # self.inf_frame_ids = sorted(list(set(inf_ids)), key=lambda x: int(x))
-        # self.inf_frame_pos = {fid: i for i, fid in enumerate(self.inf_frame_ids)}
-        # -------- optional time delay config (default: off) --------
-        self.delay_cfg = params.get('time_delay', {})
-        self.add_delay = self.delay_cfg.get('add_delay', False)
-        self.delay_agent = self.delay_cfg.get('agent', 'infrastructure')
-        self.delay_k = int(self.delay_cfg.get('k', 0))
-        self.delay_mode = self.delay_cfg.get('mode', 'previous')
-        self.delay_fallback = self.delay_cfg.get('fallback', 'current')
-
-        # build delayed-infra candidates ONLY from current split,
-        # and only keep candidates whose required infra files exist.
-        self.inf_frame_to_info = OrderedDict()
-        inf_ids = []
-
-        for veh_frame_id in self.split_info:
-            if veh_frame_id not in self.co_data:
-                continue
-
-            frame_info = self.co_data[veh_frame_id]
-            inf_frame_id = frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
-
-            calib_path = os.path.join(
-                self.root_dir,
-                'infrastructure-side/calib/virtuallidar_to_world/{}.json'.format(inf_frame_id)
-            )
-            label_path = os.path.join(
-                self.root_dir,
-                'infrastructure-side/label/virtuallidar/{}.json'.format(inf_frame_id)
-            )
-            pcd_path = os.path.join(
-                self.root_dir,
-                frame_info["infrastructure_pointcloud_path"]
-            )
-
-            if os.path.exists(calib_path) and os.path.exists(label_path) and os.path.exists(pcd_path):
-                self.inf_frame_to_info[inf_frame_id] = frame_info
-                inf_ids.append(inf_frame_id)
-
-        self.inf_frame_ids = sorted(list(set(inf_ids)), key=lambda x: int(x))
-        self.inf_frame_pos = {fid: i for i, fid in enumerate(self.inf_frame_ids)}
-
-    # def get_delayed_infra_info(self, current_frame_info):
-    #     if (not self.add_delay) or self.delay_k <= 0:
-    #         return current_frame_info
-
-    #     if self.delay_agent not in ['infrastructure', 'infra', 'rsu']:
-    #         return current_frame_info
-
-    #     current_inf_id = current_frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
-    #     if current_inf_id not in self.inf_frame_pos:
-    #         return current_frame_info
-
-    #     current_pos = self.inf_frame_pos[current_inf_id]
-
-    #     if self.delay_mode == 'previous':
-    #         delayed_pos = max(0, current_pos - self.delay_k)
-    #     else:
-    #         delayed_pos = max(0, current_pos - self.delay_k)
-
-    #     delayed_inf_id = self.inf_frame_ids[delayed_pos]
-    #     delayed_frame_info = self.inf_frame_to_info[delayed_inf_id]
-
-    #     return delayed_frame_info
-    def get_delayed_infra_info(self, current_frame_info):
-        """
-        Return a delayed infrastructure frame if enabled.
-        If no valid delayed frame exists, always fall back to current_frame_info.
-        """
-        # delay disabled
-        if (not getattr(self, 'add_delay', False)) or getattr(self, 'delay_k', 0) <= 0:
-            return current_frame_info
-
-        # only support RSU / infrastructure delay for now
-        if getattr(self, 'delay_agent', 'infrastructure') not in ['infrastructure', 'infra', 'rsu']:
-            return current_frame_info
-
-        current_inf_id = current_frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
-
-        # if current frame is not in valid delayed candidate list, fall back
-        if current_inf_id not in self.inf_frame_pos:
-            return current_frame_info
-
-        current_pos = self.inf_frame_pos[current_inf_id]
-
-        # only support previous-k-frame delay
-        if getattr(self, 'delay_mode', 'previous') != 'previous':
-            return current_frame_info
-
-        target_pos = current_pos - self.delay_k
-
-        # search backward for a valid candidate
-        while target_pos >= 0:
-            delayed_inf_id = self.inf_frame_ids[target_pos]
-            delayed_frame_info = self.inf_frame_to_info.get(delayed_inf_id, None)
-
-            if delayed_frame_info is not None:
-                calib_path = os.path.join(
-                    self.root_dir,
-                    'infrastructure-side/calib/virtuallidar_to_world/{}.json'.format(delayed_inf_id)
-                )
-                label_path = os.path.join(
-                    self.root_dir,
-                    'infrastructure-side/label/virtuallidar/{}.json'.format(delayed_inf_id)
-                )
-                pcd_path = os.path.join(
-                    self.root_dir,
-                    delayed_frame_info["infrastructure_pointcloud_path"]
-                )
-
-                if os.path.exists(calib_path) and os.path.exists(label_path) and os.path.exists(pcd_path):
-                    return delayed_frame_info
-
-            target_pos -= 1
-
-        # absolutely never return None
-        return current_frame_info
-
     def retrieve_base_data(self, idx):
         """
         Given the index, return the corresponding data.
@@ -239,20 +106,8 @@ class IntermediateFusionDatasetDAIR(Dataset):
         """
         
         veh_frame_id = self.split_info[idx]
-        # frame_info = self.co_data[veh_frame_id]
-        # system_error_offset = frame_info["system_error_offset"]
-        # frame_info = self.co_data[veh_frame_id]
-        # delayed_frame_info = self.get_delayed_infra_info(frame_info)
-        
-        # system_error_offset = delayed_frame_info["system_error_offset"]
         frame_info = self.co_data[veh_frame_id]
-        delayed_frame_info = self.get_delayed_infra_info(frame_info)
-
-        if delayed_frame_info is None:
-            delayed_frame_info = frame_info
-
-        system_error_offset = delayed_frame_info["system_error_offset"]
-
+        system_error_offset = frame_info["system_error_offset"]
         data = OrderedDict()
         data[0] = OrderedDict() # veh-side
         data[0]['ego'] = True
@@ -277,46 +132,19 @@ class IntermediateFusionDatasetDAIR(Dataset):
         if self.clip_pc:
             data[0]['lidar_np'] = data[0]['lidar_np'][data[0]['lidar_np'][:,0]>0]
 
-        # data[1]['params'] = OrderedDict()
-        # inf_frame_id = frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
-        # data[1]['params']['vehicles'] = [] # we only load cooperative once in veh-side
-        # virtuallidar_to_world_json_file = load_json(os.path.join(self.root_dir,'infrastructure-side/calib/virtuallidar_to_world/'+str(inf_frame_id)+'.json'))
-        # transformation_matrix1 = inf_side_rot_and_trans_to_trasnformation_matrix(virtuallidar_to_world_json_file,system_error_offset)
-        # data[1]['params']['lidar_pose'] = tfm_to_pose(transformation_matrix1)
-
-        # ######################## Single View GT ########################
-        # infra_side_path = os.path.join(self.root_dir, 'infrastructure-side/label/virtuallidar/{}.json'.format(inf_frame_id))
-        # data[1]['params']['vehicles_single'] = load_json(infra_side_path)
-        # ######################## Single View GT ########################
-
-        # data[1]['lidar_np'], _ = pcd_utils.read_pcd(os.path.join(self.root_dir,frame_info["infrastructure_pointcloud_path"]))
         data[1]['params'] = OrderedDict()
-        inf_frame_id = delayed_frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
+        inf_frame_id = frame_info['infrastructure_image_path'].split("/")[-1].replace(".jpg", "")
         data[1]['params']['vehicles'] = [] # we only load cooperative once in veh-side
-
-        virtuallidar_to_world_json_file = load_json(
-            os.path.join(
-                self.root_dir,
-                'infrastructure-side/calib/virtuallidar_to_world/' + str(inf_frame_id) + '.json'
-            )
-        )
-        transformation_matrix1 = inf_side_rot_and_trans_to_trasnformation_matrix(
-            virtuallidar_to_world_json_file,
-            system_error_offset
-        )
+        virtuallidar_to_world_json_file = load_json(os.path.join(self.root_dir,'infrastructure-side/calib/virtuallidar_to_world/'+str(inf_frame_id)+'.json'))
+        transformation_matrix1 = inf_side_rot_and_trans_to_trasnformation_matrix(virtuallidar_to_world_json_file,system_error_offset)
         data[1]['params']['lidar_pose'] = tfm_to_pose(transformation_matrix1)
 
         ######################## Single View GT ########################
-        infra_side_path = os.path.join(
-            self.root_dir,
-            'infrastructure-side/label/virtuallidar/{}.json'.format(inf_frame_id)
-        )
+        infra_side_path = os.path.join(self.root_dir, 'infrastructure-side/label/virtuallidar/{}.json'.format(inf_frame_id))
         data[1]['params']['vehicles_single'] = load_json(infra_side_path)
         ######################## Single View GT ########################
 
-        data[1]['lidar_np'], _ = pcd_utils.read_pcd(
-            os.path.join(self.root_dir, delayed_frame_info["infrastructure_pointcloud_path"])
-        )
+        data[1]['lidar_np'], _ = pcd_utils.read_pcd(os.path.join(self.root_dir,frame_info["infrastructure_pointcloud_path"]))
         return data
 
     def __len__(self):

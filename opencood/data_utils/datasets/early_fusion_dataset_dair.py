@@ -328,6 +328,61 @@ class EarlyFusionDatasetDAIR(Dataset):
         return self.post_processor.generate_object_center_dairv2x(cav_contents,
                                                         reference_lidar_pose)
 
+    def collate_batch_train(self, batch):
+        output_dict = {'ego': {}}
+
+        object_bbx_center = []
+        object_bbx_mask = []
+        object_ids = []
+        label_dict_list = []
+        processed_lidar_list = []
+
+        if self.visualize:
+            origin_lidar = []
+
+        for i in range(len(batch)):
+            ego_dict = batch[i]['ego']
+            object_bbx_center.append(ego_dict['object_bbx_center'])
+            object_bbx_mask.append(ego_dict['object_bbx_mask'])
+            object_ids.append(ego_dict['object_ids'])
+            label_dict_list.append(ego_dict['label_dict'])
+            processed_lidar_list.append(ego_dict['processed_lidar'])
+
+        if self.visualize and 'origin_lidar' in ego_dict:
+            origin_lidar.append(ego_dict['origin_lidar'])
+
+        object_bbx_center = torch.from_numpy(np.array(object_bbx_center))
+        object_bbx_mask = torch.from_numpy(np.array(object_bbx_mask))
+
+        processed_lidar_torch_dict = self.pre_processor.collate_batch(
+            processed_lidar_list
+        )
+        label_torch_dict = self.post_processor.collate_batch(label_dict_list)
+
+        output_dict['ego'].update({
+        'object_bbx_center': object_bbx_center,
+        'object_bbx_mask': object_bbx_mask,
+        'object_ids': object_ids[0],
+        'processed_lidar': processed_lidar_torch_dict,
+        'label_dict': label_torch_dict,
+    })
+
+        if batch[0]['ego']['anchor_box'] is not None:
+            output_dict['ego'].update({
+                'anchor_box': torch.from_numpy(
+                    np.array(batch[0]['ego']['anchor_box'])
+                )
+            })
+
+        if self.visualize and len(origin_lidar) > 0:
+            origin_lidar = np.array(
+                downsample_lidar_minimum(pcd_np_list=origin_lidar)
+            )
+            origin_lidar = torch.from_numpy(origin_lidar)
+            output_dict['ego'].update({'origin_lidar': origin_lidar})
+
+        return output_dict
+
     def collate_batch_test(self, batch):
         """
         Customized collate function for pytorch dataloader during testing

@@ -24,6 +24,10 @@ def train_parser():
                         help='data generation yaml file needed ')
     parser.add_argument('--model_dir', default='',
                         help='Continued training path')
+    parser.add_argument('--pretrained_model_dir', default='',
+                        help='Load pretrained weights from this directory, but start a new training run.')
+    parser.add_argument('--pretrained_epoch', default=None,
+                        help='Which epoch to load from pretrained_model_dir.')                        
     parser.add_argument('--fusion_method', '-f', default="intermediate",
                         help='passed to inference.')
     opt = parser.parse_args()
@@ -70,19 +74,41 @@ def main():
     optimizer = train_utils.setup_optimizer(hypes, model)
 
 
-    # if we want to train from last checkpoint.
+    # # if we want to train from last checkpoint.
+    # if opt.model_dir:
+    #     saved_path = opt.model_dir
+    #     init_epoch, model = train_utils.load_saved_model(saved_path, model)
+    #     scheduler = train_utils.setup_lr_schedular(hypes, optimizer, init_epoch=init_epoch)
+    # else:
+    #     init_epoch = 0
+    #     # if we train the model from scratch, we need to create a folder
+    #     # to save the model,
+    #     saved_path = train_utils.setup_train(hypes)
+    #     # lr scheduler setup
+    #     scheduler = train_utils.setup_lr_schedular(hypes, optimizer)
+    # Case 1: resume training in the same experiment folder.
+    # This will read model_dir/config.yaml because yaml_utils.load_yaml() does that.
     if opt.model_dir:
         saved_path = opt.model_dir
         init_epoch, model = train_utils.load_saved_model(saved_path, model)
         scheduler = train_utils.setup_lr_schedular(hypes, optimizer, init_epoch=init_epoch)
-    else:
+
+    # Case 2: fine-tune from a pretrained checkpoint, but save as a new experiment.
+    elif opt.pretrained_model_dir:
         init_epoch = 0
-        # if we train the model from scratch, we need to create a folder
-        # to save the model,
+        _, model = train_utils.load_saved_model(
+            opt.pretrained_model_dir,
+            model,
+            opt.pretrained_epoch
+        )
         saved_path = train_utils.setup_train(hypes)
-        # lr scheduler setup
         scheduler = train_utils.setup_lr_schedular(hypes, optimizer)
 
+    # Case 3: train from scratch.
+    else:
+        init_epoch = 0
+        saved_path = train_utils.setup_train(hypes)
+        scheduler = train_utils.setup_lr_schedular(hypes, optimizer)
     # record training
     writer = SummaryWriter(saved_path)
 
@@ -181,7 +207,7 @@ def main():
 
     print('Training Finished, checkpoints saved to %s' % saved_path)
     torch.cuda.empty_cache()
-    run_test = True
+    run_test = False
     if run_test:
         fusion_method = opt.fusion_method
         cmd = f"python /GPFS/data/yhu/code/OpenCOOD/opencood/tools/inference.py --model_dir {saved_path} --fusion_method {fusion_method}"

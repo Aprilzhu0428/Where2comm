@@ -1,11 +1,11 @@
-name: dair_where2comm_attn_multiscale_resnet
+name: dair_where2comm_finetune_noise_delay
 data_dir: "/data2/collaborative_perception/data/dair_v2x/cooperative-vehicle-infrastructure"
 root_dir: "/data2/collaborative_perception/data/dair_v2x/cooperative-vehicle-infrastructure/train.json"
 validate_dir: "/data2/collaborative_perception/data/dair_v2x/cooperative-vehicle-infrastructure/val.json"
 test_dir: "/data2/collaborative_perception/data/dair_v2x/cooperative-vehicle-infrastructure/val.json"
 
 noise_setting:
-  add_noise: false
+  add_noise: true
   args: 
     pos_std: 0.2
     rot_std: 0.2
@@ -13,7 +13,7 @@ noise_setting:
     rot_mean: 0
 
 time_delay:
-  add_delay: false
+  add_delay: true
   agent: infrastructure
   k: 1
   mode: previous
@@ -26,7 +26,7 @@ yaml_parser: "load_point_pillar_params"
 train_params:
 # original batch size & epoches 6 & 30
   batch_size: &batch_size 5
-  epoches: 60
+  epoches: 20
   # freq original 2 & 2
   eval_freq: 2
   save_freq: 2
@@ -134,11 +134,11 @@ model:
       only_attention: true
       communication:
         # 通信置信度阈值。越低，传的区域越多，通信量更大。
-        thre: 0.01
+        thre: 0.00013
         # 对通信图做平滑
         gaussian_smooth:
           k_size: 5
-          c_sigma: 1.0
+          c_sigma: 1.0]
       agg_operator:
         mode: 'ATTEN'
         feature_dim: 256
@@ -155,7 +155,7 @@ loss:
 
 optimizer:
   core_method: Adam
-  lr: 0.002
+  lr: 0.0002
   args:
     eps: 1e-10
     weight_decay: 1e-4
